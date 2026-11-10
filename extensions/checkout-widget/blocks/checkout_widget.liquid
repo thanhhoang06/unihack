@@ -1,0 +1,142 @@
+{% assign product = block.settings.product %}
+<div class="cw" data-cw>
+  <button type="button" class="cw__btn" data-cw-open style="background: {{ block.settings.color }}">
+    {{ block.settings.button_text }}
+  </button>
+
+  <div class="cw__overlay" data-cw-modal hidden>
+    <div class="cw__box">
+            <h3>{{ block.settings.title }}</h3>
+      <div data-cw-cart>Đang tải giỏ hàng...</div>
+
+      <div data-cw-step="form">
+        <label class="cw__label">Ví</label>
+        <select class="cw__select" data-cw-wallet>
+          <option>MetaMask</option>
+          <option>Phantom</option>
+          <option>Coinbase Wallet</option>
+        </select>
+
+        <label class="cw__label">Chain</label>
+        <select class="cw__select" data-cw-chain>
+          <option>Base Sepolia</option>
+          <option>Avalanche Fuji</option>
+          <option>Ethereum Sepolia</option>
+        </select>
+
+        <p class="cw__note">Demo giả lập, chưa kết nối ví thật.</p>
+        <button type="button" class="cw__pay" data-cw-pay style="background: {{ block.settings.color }}">Xác nhận thanh toán</button>
+        <button type="button" class="cw__close" data-cw-close>Đóng</button>
+      </div>
+
+      <div data-cw-step="loading" hidden>
+        <p>Đang xử lý giao dịch...</p>
+      </div>
+
+      <div data-cw-step="done" hidden>
+        <p><strong>Thanh toán thành công</strong></p>
+        <p class="cw__note" data-cw-summary></p>
+        <p class="cw__note" data-cw-hash></p>
+        <button type="button" class="cw__close" data-cw-close>Đóng</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .cw__btn { color: #fff; border: 0; border-radius: 8px; padding: 12px 20px; cursor: pointer; width: 100%; font-size: 16px; }
+  .cw__overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+  .cw__overlay[hidden], [data-cw-step][hidden] { display: none; }
+  .cw__box { background: #fff; color: #111; padding: 24px; border-radius: 12px; width: 320px; max-width: 90vw; }
+  .cw__label { display: block; margin-top: 12px; font-size: 13px; }
+  .cw__select { width: 100%; padding: 8px; margin-top: 4px; }
+  .cw__note { font-size: 13px; opacity: .7; word-break: break-all; }
+  .cw__pay { color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; width: 100%; margin-top: 8px; }
+  .cw__pay:disabled { opacity: .4; cursor: not-allowed; }
+  .cw__close { margin-top: 8px; padding: 8px 16px; cursor: pointer; }
+</style>
+
+<script>
+  document.querySelectorAll('[data-cw]').forEach(function (root) {
+    var modal = root.querySelector('[data-cw-modal]');
+    var steps = {
+      form: root.querySelector('[data-cw-step="form"]'),
+      loading: root.querySelector('[data-cw-step="loading"]'),
+      done: root.querySelector('[data-cw-step="done"]')
+    };
+    function show(name) {
+      Object.keys(steps).forEach(function (k) { steps[k].hidden = k !== name; });
+    }
+    function randomHash() {
+      var s = '0x';
+      for (var i = 0; i < 40; i++) s += Math.floor(Math.random() * 16).toString(16);
+      return s;
+    }
+
+        var cartBox = root.querySelector('[data-cw-cart]');
+    var payBtn = root.querySelector('[data-cw-pay]');
+    var lastTotal = '';
+
+    function fmt(cents, cur) {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: cur }).format(cents / 100);
+    }
+
+    function loadCart() {
+      cartBox.textContent = 'Đang tải giỏ hàng...';
+      payBtn.disabled = true;
+      fetch('/cart.js')
+        .then(function (r) { return r.json(); })
+        .then(function (cart) {
+          if (!cart.item_count) {
+            cartBox.textContent = 'Giỏ hàng trống. Hãy thêm sản phẩm trước.';
+            return;
+          }
+          lastTotal = fmt(cart.total_price, cart.currency);
+          var html = '<ul style="padding-left:18px;margin:8px 0">';
+          cart.items.forEach(function (it) {
+            html += '<li>' + it.quantity + ' × ' + it.product_title + ' — ' + fmt(it.final_line_price, cart.currency) + '</li>';
+          });
+          html += '</ul><p><strong>Tổng: ' + lastTotal + '</strong></p>';
+          cartBox.innerHTML = html;
+          payBtn.disabled = false;
+        })
+        .catch(function () {
+          cartBox.textContent = 'Không đọc được giỏ hàng.';
+        });
+    }
+
+    root.querySelector('[data-cw-open]').addEventListener('click', function () {
+      show('form');
+      modal.hidden = false;
+      loadCart();
+    });
+
+    root.querySelectorAll('[data-cw-close]').forEach(function (b) {
+      b.addEventListener('click', function () { modal.hidden = true; });
+    });
+
+    root.querySelector('[data-cw-pay]').addEventListener('click', function () {
+      var wallet = root.querySelector('[data-cw-wallet]').value;
+      var chain = root.querySelector('[data-cw-chain]').value;
+      show('loading');
+      setTimeout(function () {
+                root.querySelector('[data-cw-summary]').textContent = 'Tổng: ' + lastTotal + ' | Ví: ' + wallet + ' | Chain: ' + chain;
+        root.querySelector('[data-cw-hash]').textContent = 'Tx: ' + randomHash();
+        show('done');
+      }, 1500);
+    });
+  });
+</script>
+
+{% schema %}
+{
+  "name": "Checkout Widget",
+  "target": "section",
+  "settings": [
+    { "type": "product", "id": "product", "label": "product", "autofill": true },
+    { "type": "text", "id": "button_text", "label": "Chữ trên nút", "default": "Pay with crypto" },
+    { "type": "text", "id": "title", "label": "Tiêu đề", "default": "Checkout" },
+    { "type": "color", "id": "color", "label": "Màu nút", "default": "#111111" }
+  ]
+}
+{% endschema %}
